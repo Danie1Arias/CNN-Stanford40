@@ -1,7 +1,11 @@
 import os
 import xml.etree.ElementTree as ET
+from PIL import Image
+from torch.utils.data import DataLoader as TorchDataLoader, Dataset
+import torch
 
-class DataLoader:
+
+class StanfordDataLoader:
     def __init__(self, base_dir="./Stanford40"):
         # Initialize the directories based on the base directory
         self.BASE_DIR = base_dir
@@ -72,7 +76,51 @@ class DataLoader:
                         # Append the processed image data to the appropriate split.
                         dataset[split].append({
                             "filename": os.path.join(self.IMAGE_DIR, annotation["filename"]),
-                            "action": annotation["action"],
+                            "action": annotation["action"],  # Keep the action as a string
                             "bndbox": annotation["bndbox"]
                         })
         return dataset
+
+    def create_dataloaders(self, transform, batch_size=32):
+        # Crear un mapeo de acción a índice
+        dataset = self.prepare_dataset()
+        actions = sorted(set(item["action"] for split in dataset.values() for item in split))
+        class_to_idx = {action: idx for idx, action in enumerate(actions)}
+
+        # Custom Dataset with bounding box support
+        class Stanford40DatasetWithBoxes(Dataset):
+            def __init__(self, dataset, split, class_to_idx, transform=None):
+                self.data = dataset[split]
+                self.class_to_idx = class_to_idx
+                self.transform = transform
+
+            def __len__(self):
+                return len(self.data)
+
+            def __getitem__(self, idx):
+                item = self.data[idx]
+                image = Image.open(item["filename"]).convert("RGB")
+                
+                # Convertir la acción a índice
+                label = self.class_to_idx[item["action"]]
+                
+                # Recortar la imagen usando el bounding box
+                bndbox = item["bndbox"]
+                image = image.crop((bndbox["xmin"], bndbox["ymin"], bndbox["xmax"], bndbox["ymax"]))
+                
+                # Aplicar transformaciones
+                if self.transform:
+                    image = self.transform(image)
+
+                # Devolver la imagen y el label como tensor
+                return image, torch.tensor(label, dtype=torch.long)
+
+        # Crear datasets de entrenamiento y prueba
+        train_dataset = Stanford40DatasetWithBoxes(dataset, split="train", class_to_idx=class_to_idx, transform=transform)
+        test_dataset = Stanford40DatasetWithBoxes(dataset, split="test", class_to_idx=class_to_idx, transform=transform)
+
+        # Crear DataLoaders usando Torch's DataLoader
+        train_loader = TorchDataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        test_loader = TorchDataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+        return train_loader, test_loader
