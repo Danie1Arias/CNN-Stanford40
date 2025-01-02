@@ -146,4 +146,3 @@ class ResidualBlock(nn.Module):
         out += self.shortcut(x)
         out = F.relu(out)
         return out
-
