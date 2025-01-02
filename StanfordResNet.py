@@ -37,16 +37,9 @@ def train_model(model, train_loader, criterion, optimizer, device, num_epochs=10
         for images, labels in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
             images, labels = images.to(device), labels.to(device)
 
-            # Zero the gradient buffers
             optimizer.zero_grad()
-
-            # Forward pass
             outputs = model(images)
-
-            # Compute loss
             loss = criterion(outputs, labels)
-
-            # Backward pass and optimization
             loss.backward()
             optimizer.step()
 

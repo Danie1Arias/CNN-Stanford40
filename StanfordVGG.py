@@ -2,27 +2,28 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import models
+from tqdm import tqdm
 
-# Define the Googlenet-based model class
-class GooglenetModel(nn.Module):
+# Define the VGG model class
+class VGGModel(nn.Module):
     def __init__(self, num_classes):
-        super(GooglenetModel, self).__init__()
-        self.googlenet = models.googlenet(pretrained=True)  # Load pretrained Googlenet model
-        self.googlenet.fc = nn.Linear(self.googlenet.fc.in_features, num_classes)  # Modify the final layer for the number of classes
+        super(VGGModel, self).__init__()
+        self.vgg = models.vgg16(pretrained=True)  # Load pre-trained VGG16 model
+        # Modify the last fully connected layer to match the number of classes
+        self.vgg.classifier[6] = nn.Linear(in_features=4096, out_features=num_classes)
 
     def forward(self, x):
-        return self.googlenet(x)
+        return self.vgg(x)
 
-
-# Function to train the model
+# Training function
 def train_model(model, train_loader, criterion, optimizer, device, num_epochs=10):
     model.train()
     for epoch in range(num_epochs):
         running_loss = 0.0
-        for images, labels in train_loader:
+        for images, labels in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
             images, labels = images.to(device), labels.to(device)
 
-            optimizer.zero_grad()  # Zero the gradients
+            optimizer.zero_grad()  # Reset gradients
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()  # Backward pass
@@ -30,11 +31,10 @@ def train_model(model, train_loader, criterion, optimizer, device, num_epochs=10
 
             running_loss += loss.item()
 
-        # Print average loss per epoch
+        # Print average loss for the epoch
         print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {running_loss / len(train_loader):.4f}")
 
-
-# Function to evaluate the model
+# Evaluation function
 def evaluate_model(model, test_loader, device):
     model.eval()
     correct = 0
@@ -46,5 +46,6 @@ def evaluate_model(model, test_loader, device):
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+
     accuracy = 100 * correct / total
     print(f"Model accuracy on the test set: {accuracy:.2f}%")
